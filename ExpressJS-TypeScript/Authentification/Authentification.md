@@ -41,7 +41,7 @@ JWT_SECRET=ma_cle_secrete_super_longue_123!
 
 ## 📂 3. Code Source (Backend)
 
-# A. Le Middleware CORS (dans l'index.ts)
+### A. Le Middleware CORS (dans l'index.ts)
 
 Indispensable pour autoriser le Front (port 5173) à parler au Back (port 5000).
 
@@ -64,7 +64,7 @@ app.listen(config.port, "0.0.0.0", () => {
 });
 ```
 
-# B. La Route (src/routes/authRoutes.ts)
+### B. La Route (src/routes/authRoutes.ts)
 
 ```ts
 import { Router } from "express";
@@ -78,7 +78,7 @@ router.post("/connexion", login);
 export default router;
 ```
 
-# C. Le Controller (src/controllers/authController.ts)
+### C. Le Controller (src/controllers/authController.ts)
 
 ```ts
 import type { Request, Response } from "express";
@@ -117,7 +117,7 @@ export const login = async (req: Request, res: Response) => {
 };
 ```
 
-# D. Le Middleware de Protection (src/middlewares/authMiddleware.ts)
+### D. Le Middleware de Protection (src/middlewares/authMiddleware.ts)
 
 A utiliser pour des routes privées (si il y en a)
 
