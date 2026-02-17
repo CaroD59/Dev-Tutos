@@ -1,0 +1,214 @@
+# 📚 DOCUMENTATION : SUPABASE STORAGE + EXPRESS + REACT (TS) 🚀
+
+---
+
+## 🛠️ 1. CONFIGURATION SUPABASE
+
+1. Connecte-toi sur ton dashboard Supabase.
+2. Va dans l'onglet Storage.
+3. Crée un nouveau Bucket (ex: images).
+<center>
+  <img src="./img/Création-Bucket.png" />
+</center>
+4. Important : Rends le bucket "Public" pour que les images soient accessibles via URL.
+<center>
+  <img src="./img/Public-Bucket.png" />
+</center>
+
+---
+
+## 🔐 2. LE FICHIER `.ENV` (BACKEND)
+
+À placer à la racine de ton projet backend.
+
+```env
+PORT=5000
+SUPABASE_URL=https://votre_projet.supabase.co
+SUPABASE_KEY=votre_cle_service_role_ou_anon
+SUPABASE_BUCKET=images
+DATABASE_URL=votre_db_url
+```
+
+<center>
+  <img src="./img/API-URL.png" />
+  <img src="./img/Supabase-URL.png" />
+</center>
+
+---
+
+## 🚀 3. Configuration Backend (Express + TypeScript)
+
+```bash
+npm install @supabase/supabase-js multer
+npm install --save-dev @types/multer
+```
+
+---
+
+## ⚙️ 4. BACKEND : CONFIGURATION CLIENT (`src/config/supabase.ts`)
+
+```typescript
+import { createClient } from "@supabase/supabase-js";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const supabaseUrl = process.env.SUPABASE_URL as string;
+const supabaseKey = process.env.SUPABASE_KEY as string;
+
+export const supabase = createClient(supabaseUrl, supabaseKey);
+export const bucketName = process.env.SUPABASE_BUCKET as string;
+```
+
+---
+
+## 📤 5. BACKEND : MIDDLEWARE MULTER (`src/middlewares/multer.ts`)
+
+```typescript
+import multer from "multer";
+
+const storage = multer.memoryStorage();
+export const upload = multer({ storage });
+```
+
+---
+
+## 🧠 6. BACKEND : LE CONTROLEUR (`src/controllers/postController.ts`)
+
+```typescript
+import { Request, Response } from "express";
+import { supabase, bucketName } from "../config/supabase";
+
+export const createPost = async (req: Request, res: Response) => {
+  try {
+    const { title, content } = req.body;
+    const file = req.file; // Récupéré par Multer
+
+    let imageUrl = "";
+
+    if (file) {
+      // Créer un nom de fichier unique
+      const fileName = `${Date.now()}-${file.originalname}`;
+
+      // 1. Upload vers Supabase
+      const { data, error } = await supabase.storage
+        .from(bucketName)
+        .upload(fileName, file.buffer, {
+          contentType: file.mimetype,
+          upsert: false,
+        });
+
+      if (error) throw error;
+
+      // 2. Récupérer l'URL publique
+      const { data: publicUrlData } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(fileName);
+
+      imageUrl = publicUrlData.publicUrl;
+    }
+
+    // 3. Sauvegarder en BDD (Exemple SQL)
+    // const [result] = await pool.query("INSERT INTO posts (title, content, image_url) VALUES (?, ?, ?)", [title, content, imageUrl]);
+
+    res.status(201).json({ message: "Article créé !", imageUrl });
+  } catch (error) {
+    res.status(500).json({ message: "Erreur lors de l'upload" });
+  }
+};
+```
+
+---
+
+## 🛣️ 7. BACKEND : ROUTES ET INDEX (`src/routes/postRoutes.ts` & `src/index.ts`)
+
+```typescript
+// postRoutes.ts
+import { Router } from "express";
+import { createPost } from "../controllers/postController";
+import { upload } from "../middlewares/multer";
+
+const router = Router();
+router.post("/", upload.single("image"), createPost); // "image" doit correspondre au nom dans le FormData
+export default router;
+
+// index.ts
+import express from "express";
+import postRoutes from "./routes/postRoutes";
+
+const app = express();
+app.use(express.json());
+app.use("/api/posts", postRoutes);
+
+app.listen(5000, () => console.log("Serveur sur port 5000"));
+```
+
+---
+
+## 🌐 8. FRONTEND : APPEL API (`src/services/blogAPI.ts`)
+
+```typescript
+const API_URL = import.meta.env.VITE_API_URL;
+
+export const createPost = async (token: string | null, formData: FormData) => {
+  const response = await fetch(`${API_URL}/posts`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      // Attention: Ne PAS mettre Content-Type ici, le navigateur le fait seul pour FormData
+    },
+    body: formData,
+  });
+  return response.json();
+};
+```
+
+---
+
+## 🌐 9. FRONTEND : COMPOSANT FORMULAIRE (`src/services/PostForm.tsx`)
+
+```typescript
+import { useState } from "react";
+
+export const PostForm = () => {
+  const [file, setFile] = useState<File | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData();
+    formData.append("title", "Mon Titre");
+    if (file) formData.append("image", file); // Correspond à upload.single("image")
+
+    await createPost(token, formData);
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+      <button type="submit">Envoyer</button>
+    </form>
+  );
+};
+```
+
+<center>
+  <img src="./img/BDD.png" />
+</center>
+
+---
+
+## 🐞 10. BUGS COURANTS & RÉPARATIONS
+
+| Bug 🐞             | Cause                    | Réparation ✅                                                                                                                                                   |
+| :----------------- | :----------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **403 Forbidden**  | RLS (Row Level Security) | Sur Supabase, ajoute une Policy INSERT/SELECT sur le bucket.                                                                                                    |
+| **Empty File**     | Nom du champ             | `formData.append("image", file)` doit matcher `upload.single("image")`.                                                                                         |
+| **URL incorrecte** | Bucket privé             | Coche la case "Public" dans les réglages du Bucket.                                                                                                             |
+| **Erreur 500 JWS** | Extraction du Token      | Vérifie ton middleware : il faut souvent faire `const token = req.headers.authorization?.split(" ")[1];` pour ignorer le mot "Bearer" et ne garder que le hash. |
+| **JWT Malformed**  | Token vide ou null       | Côté Frontend, assure-toi de ne pas envoyer la chaîne `"Bearer null"` ou `"Bearer undefined"` si l'utilisateur n'est pas connecté.                              |
+
+---
+
+## 💡 11. Pro Tips
+
+- Nettoyage : Si tu supprimes une image en BDD, n'oublie pas de supprimer aussi le fichier sur Supabase avec `await supabase.storage.from(bucketName).remove(["nom_du_fichier.png"]);`.
